@@ -262,6 +262,7 @@ def open_issues(
 
 REPO = "vortex3964/Issue-opener"
 BRANCH = "main"
+APP = "issue-opener"
 COMMITS_URL = f"https://api.github.com/repos/{REPO}/commits/{BRANCH}"
 TARBALL_URL = f"https://github.com/{REPO}/archive/refs/heads/{BRANCH}.tar.gz"
 
@@ -369,11 +370,72 @@ def check_for_update(apply: bool):
         print("update failed, try again later")
 
 
+# Doc : uninstall helper
+# removes the launcher, the install dir with its venv and the
+# path lines the installer added to the shell configs, a dev
+# checkout is left alone
+
+
+def uninstall_self() -> None:
+    install_dir = get_install_dir()
+    if install_dir is None:
+        print(
+            f"{APP} --uninstall only works on an installed copy, use git rm in a dev checkout"
+        )
+        return
+
+    bin_dir = os.environ.get(
+        "XDG_BIN_HOME", os.path.join(os.path.expanduser("~"), ".local", "bin")
+    )
+    if os.name == "nt":
+        launcher = os.path.join(
+            os.environ.get("LOCALAPPDATA", bin_dir), "bin", f"{APP}.cmd"
+        )
+    else:
+        launcher = os.path.join(bin_dir, APP)
+
+    try:
+        os.remove(launcher)
+    except OSError:
+        pass
+
+    if os.name != "nt":
+        # remove the lines the installer added to shell configs
+        removed = [
+            f"# {APP}",
+            f"export PATH={bin_dir}:$PATH",
+            f"fish_add_path {bin_dir}",
+        ]
+        configs = [
+            os.path.expanduser("~/.bashrc"),
+            os.path.expanduser("~/.bash_profile"),
+            os.path.expanduser("~/.profile"),
+            os.path.join(os.environ.get("ZDOTDIR", os.path.expanduser("~")), ".zshrc"),
+            os.path.expanduser("~/.zshenv"),
+            os.path.expanduser("~/.config/fish/config.fish"),
+        ]
+        for cfg in configs:
+            try:
+                with open(cfg) as f:
+                    lines = f.readlines()
+            except OSError:
+                continue
+            keep = [ln for ln in lines if ln.rstrip("\n") not in removed]
+            if len(keep) == len(lines):
+                continue
+            with open(cfg, "w") as f:
+                f.writelines(keep)
+
+    shutil.rmtree(install_dir, ignore_errors=True)
+    print(f"{APP} uninstalled")
+
+
 # Doc  : main
 # parses the command line arguments to get the project path and
 # the todo file name, reads and parses the todo file into issues,
 # resolves the credentials and opens every issue in github, the
-# update flag only updates the tool itself and skips the issue run
+# update and uninstall flags only manage the tool itself and
+# skip the issue run
 
 
 def main():
@@ -400,9 +462,19 @@ def main():
         action="store_true",
         help="check for and apply the latest version, skips the issue run",
     )
+    parser.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="remove the tool, the launcher and the path lines, skips the issue run",
+    )
     args = parser.parse_args()
 
-    # the update flag only updates the tool, nothing else runs
+    # the update and uninstall flags only manage the tool itself,
+    # nothing else runs
+    if args.uninstall:
+        uninstall_self()
+        return
+
     if args.update:
         check_for_update(apply=True)
         return

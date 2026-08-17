@@ -45,6 +45,18 @@ issue-opener --update
 
 Every normal run also checks for updates at the end and prints a note when a newer version is available, the check runs after the issues are opened so it never slows the run down. The update replaces the code only, the virtual environment is left untouched. If a future version adds new dependencies, re-run the installer.
 
+Uninstall with the tool itself:
+
+```
+issue-opener --uninstall
+```
+
+or with the script:
+
+```
+bash install/uninstall.sh
+```
+
 ## Usage
 
 ```
@@ -57,6 +69,7 @@ issue-opener [path] [file_path] [--allow-duplicates]
 | `file_path` | name of the file to read (`.txt` is appended), defaults to `todo` |
 | `--allow-duplicates` | don't skip issues whose title already exists in the repo |
 | `--update` | update issue-opener to the latest version, skips the issue run |
+| `--uninstall` | remove issue-opener, its launcher and the path lines, skips the issue run |
 
 Example:
 

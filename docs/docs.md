@@ -103,9 +103,16 @@ commit on github, it runs at the end of main so the issue opening
 is never slowed down by the network, it stays quiet when there  
 is no connection or a rate limit and it skips dev checkouts  
 
+## uninstall helper
+
+removes the launcher, the install dir with its venv and the  
+path lines the installer added to the shell configs, a dev  
+checkout is left alone  
+
 ## main
 
 parses the command line arguments to get the project path and  
 the todo file name, reads and parses the todo file into issues,  
 resolves the credentials and opens every issue in github, the  
-update flag only updates the tool itself and skips the issue run
+update and uninstall flags only manage the tool itself and  
+skip the issue run
