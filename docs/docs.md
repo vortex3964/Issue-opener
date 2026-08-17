@@ -95,8 +95,16 @@ by title by default, on a rate limit it sleeps until the reset
 time and retries the issue and it sleeps between requests to  
 avoid secondary rate limits, it reports the result of every issue  
 
+## update helpers
+
+the update check compares the installed copy against the latest  
+commit on github, it runs at the end of main so the issue opening  
+is never slowed down by the network, it stays quiet when there  
+is no connection or a rate limit and it skips dev checkouts  
+
 ## main
 
 parses the command line arguments to get the project path and  
 the todo file name, reads and parses the todo file into issues,  
-resolves the credentials and opens every issue in github
+resolves the credentials and opens every issue in github, the  
+update flag only updates the tool itself and skips the issue run

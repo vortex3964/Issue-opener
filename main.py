@@ -4,11 +4,17 @@
 # detection through the github rest api
 
 import argparse
+import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -244,10 +250,126 @@ def open_issues(
     return results
 
 
+# Doc : update helpers
+# the update check compares the installed copy against the latest
+# commit on github, it runs at the end of main so the issue opening
+# is never slowed down by the network, it stays quiet when there
+# is no connection or a rate limit and it skips dev checkouts
+
+REPO = "vortex3964/Issue-opener"
+BRANCH = "main"
+COMMITS_URL = f"https://api.github.com/repos/{REPO}/commits/{BRANCH}"
+TARBALL_URL = f"https://github.com/{REPO}/archive/refs/heads/{BRANCH}.tar.gz"
+
+
+def get_install_dir() -> str | None:
+    # the launcher runs main.py from the install dir, so the script's
+    # own location is the install, a dev checkout has a .git folder
+    d = os.path.dirname(os.path.realpath(__file__))
+    if os.path.isdir(os.path.join(d, ".git")):
+        return None
+    return d
+
+
+def fetch_latest_commit() -> str | None:
+    try:
+        with urllib.request.urlopen(COMMITS_URL, timeout=5) as resp:
+            data = json.load(resp)
+        return data.get("sha")
+    except (urllib.error.URLError, OSError, json.JSONDecodeError):
+        return None
+
+
+def apply_update(install_dir: str, latest: str) -> bool:
+    tmp = tempfile.mkdtemp(prefix="issue-opener-")
+    try:
+        tarball = os.path.join(tmp, "issue-opener.tar.gz")
+        urllib.request.urlretrieve(TARBALL_URL, tarball)
+        with tarfile.open(tarball, "r:gz") as tf:
+            tf.extractall(tmp)
+
+        # find the extracted project folder, a broken tarball
+        # simply has no main.py and the update is aborted, the
+        # .venv of the install is never in the archive so it
+        # survives the update untouched
+        src = None
+        for entry in os.listdir(tmp):
+            if os.path.isfile(os.path.join(tmp, entry, "main.py")):
+                src = os.path.join(tmp, entry)
+                break
+        if src is None:
+            return False
+
+        for entry in os.listdir(src):
+            source = os.path.join(src, entry)
+            target = os.path.join(install_dir, entry)
+            if os.path.isdir(source):
+                shutil.rmtree(target, ignore_errors=True)
+                shutil.copytree(source, target)
+            else:
+                try:
+                    os.replace(source, target)
+                except OSError:
+                    shutil.copy2(source, target)
+
+        with open(os.path.join(install_dir, ".commit"), "w") as f:
+            f.write(latest)
+        return True
+    except (urllib.error.URLError, OSError, tarfile.ReadError, EOFError):
+        return False
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def read_stamp(commit_file: str) -> str | None:
+    try:
+        if not os.path.isfile(commit_file):
+            return None
+        with open(commit_file) as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def check_for_update(apply: bool):
+    install_dir = get_install_dir()
+    if install_dir is None:
+        if apply:
+            print(
+                "issue-opener --update only works on an installed copy, use git pull in a dev checkout"
+            )
+        return
+
+    latest = fetch_latest_commit()
+    if latest is None:
+        if apply:
+            print("couldn't check for updates, check your network connection")
+        return
+
+    current = read_stamp(os.path.join(install_dir, ".commit"))
+
+    if current is not None and current == latest:
+        if apply:
+            print(f"issue-opener is already up to date ({current[:7]})")
+        return
+
+    if not apply:
+        print("a new version of issue-opener is available, run 'issue-opener --update' to update")
+        return
+
+    if apply_update(install_dir, latest):
+        print(
+            f"issue-opener updated: {current[:7] if current else 'unknown'} -> {latest[:7]}"
+        )
+    else:
+        print("update failed, try again later")
+
+
 # Doc  : main
 # parses the command line arguments to get the project path and
 # the todo file name, reads and parses the todo file into issues,
-# resolves the credentials and opens every issue in github
+# resolves the credentials and opens every issue in github, the
+# update flag only updates the tool itself and skips the issue run
 
 
 def main():
@@ -269,7 +391,17 @@ def main():
         action="store_true",
         help="don't skip issues whose title already exists in the repo",
     )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="check for and apply the latest version, skips the issue run",
+    )
     args = parser.parse_args()
+
+    # the update flag only updates the tool, nothing else runs
+    if args.update:
+        check_for_update(apply=True)
+        return
 
     full_file_path = os.path.join(args.path, f"{args.file_path}.txt")
 
@@ -286,6 +418,10 @@ def main():
 
     print(f"Found {len(issues)} issue(s) to open in {slug}")
     open_issues(issues, slug, token, skip_duplicates=not args.allow_duplicates)
+
+    # the update check runs at the end so the issue opening is
+    # never slowed down by the network
+    check_for_update(apply=False)
 
 
 if __name__ == "__main__":
