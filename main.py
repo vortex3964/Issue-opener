@@ -1,0 +1,292 @@
+# Doc : Description
+# cli tool that reads a structured .txt file and bulk opens
+# github issues, it supports labels, assignees and duplicate
+# detection through the github rest api
+
+import argparse
+import os
+import re
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from typing import Any
+
+import requests
+
+
+# Doc code : Issue
+# a single github issue to open, has a title, a description,
+# a set of labels and an optional list of assignees, the labels
+# are checked against githubs allowed labels
+
+
+@dataclass
+class Issue:
+    title: str
+    description: str
+    labels: set[str] = field(default_factory=set)
+    assign: list[str] = field(default_factory=list)
+
+
+# Doc end
+
+# Doc : githubs allowed labels
+# we have a set with githubs allowed labels that we init
+# these labels include among others : bug , invalid ...etch
+ALLOWED_LABELS = {
+    "accessibility",
+    "bug",
+    "documentation",
+    "duplicate",
+    "enhancement",
+    "good first issue",
+    "help wanted",
+    "invalid",
+    "question",
+    "wontfix",
+}
+
+
+# Doc code : run
+# runs a shell command and returns its stripped stdout,
+# raises a RuntimeError when the command exits non-zero
+
+
+def run(cmd, cwd=None):
+    res = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, check=False)
+    if res.returncode != 0:
+        raise RuntimeError(f"Command failed:{' '.join(cmd)}\n{res.stderr}")
+    return res.stdout.strip()
+
+
+# Doc end
+
+# Doc code : get_repo_slug
+# reads the origin remote url of the git repo and extracts
+# the owner/repo slug from it, raises a ValueError when the
+# url is not a github one
+
+
+def get_repo_slug(path: str):
+    url = run(["git", "remote", "get-url", "origin"], cwd=path)
+    match = re.search(r"github\.com[:/](.+?)(\.git)?$", url)
+    if not match:
+        raise ValueError(f"couldnt parse github repo from remote url:{url}")
+    return match.group(1)
+
+
+# Doc end
+
+# Doc code : get_credentials
+# resolves the repo slug and the github token, the token comes
+# from the gh cli when logged in or from the GITHUB_TOKEN
+# environment variable, raises a RuntimeError when there is none
+
+
+def get_credentials(path: str):
+    slug = get_repo_slug(path)
+    try:
+        token = run(["gh", "auth", "token"])
+    except (RuntimeError, FileNotFoundError):
+        token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        raise RuntimeError(
+            "no github token found run gh auth login or set GITHUB_TOKEN"
+        )
+    return slug, token
+
+
+# Doc end
+
+# Doc: parse_file
+# parses the todo txt file into a list of issues, every issue is
+# a block of lines separated by blank lines, the first line is the
+# title, the second starts with # and holds the labels, an optional
+# line starting with @ holds the assignees and the rest is the
+# description, blocks that don't fit the format are skipped
+
+
+def parse_file(file_path: str) -> list[Issue] | None:
+    if not os.path.isfile(file_path):
+        return None
+    with open(file_path, "r") as f:
+        content = f.read()
+    blocks = [b.strip() for b in content.strip().split("\n\n") if b.strip()]
+    if not blocks:
+        return None
+    issues = []
+    for block in blocks:
+        lines = block.splitlines()
+        if len(lines) < 2:
+            # malformed block
+            continue
+        title = lines[0].strip()
+        label_line = lines[1].strip()
+        if not label_line.startswith("#"):
+            continue
+        labels = [
+            l.strip()
+            for l in label_line.lstrip("#").split(",")
+            if l.strip() in ALLOWED_LABELS
+        ]
+        assign = []
+        body_lines = []
+        for line in lines[2:]:
+            stripped = line.strip()
+            if stripped.startswith("@"):
+                assign = [
+                    a.strip().lstrip("@")
+                    for a in stripped.lstrip("@").split(",")
+                    if a.strip()
+                ]
+                break
+            body_lines.append(line)
+        description = "\n".join(body_lines).strip()
+        issues.append(
+            Issue(
+                title=title, description=description, labels=set(labels), assign=assign
+            )
+        )
+    return issues if issues else None
+
+
+# Doc: get_existing_issue_titles
+# fetches the titles of every open and closed issue so that
+# duplicates can be skipped by title, paginates through the
+# issues endpoint and filters pull requests out of the response
+
+
+def get_existing_issue_titles(slug: str, token: str) -> set[str]:
+    titles = set()
+    page = 1
+    while True:
+        resp = requests.get(
+            f"https://api.github.com/repos/{slug}/issues",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            params={"state": "all", "per_page": 100, "page": page},
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"Failed to fetch issues: {resp.status_code} {resp.text}"
+            )
+        data = resp.json()
+        if not data:
+            break
+        for item in data:
+            # the issues endpoint also returns pull requests, filter those out
+            if "pull_request" not in item:
+                titles.add(item["title"].strip())
+        page += 1
+    return titles
+
+
+# Doc : open_issues
+# creates every issue with the github rest api, skips duplicates
+# by title by default, on a rate limit it sleeps until the reset
+# time and retries the issue and it sleeps between requests to
+# avoid secondary rate limits, it reports the result of every issue
+
+
+def open_issues(
+    issues: list[Issue], slug: str, token: str, skip_duplicates: bool = True
+):
+    existing_titles = (
+        get_existing_issue_titles(slug, token) if skip_duplicates else set()
+    )
+
+    results = []
+    for i, issue in enumerate(issues):
+        if skip_duplicates and issue.title.strip() in existing_titles:
+            print(f"[{i + 1}/{len(issues)}] SKIPPED (duplicate): {issue.title}")
+            continue
+
+        payload: dict[str, Any] = {"title": issue.title, "body": issue.description}
+        if issue.labels:
+            payload["labels"] = list(issue.labels)
+        if issue.assign:
+            payload["assignees"] = issue.assign
+
+        resp = requests.post(
+            f"https://api.github.com/repos/{slug}/issues",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            json=payload,
+        )
+
+        if resp.status_code == 201:
+            data = resp.json()
+            print(f"[{i + 1}/{len(issues)}] Opened #{data['number']}: {issue.title}")
+            existing_titles.add(issue.title.strip())
+            results.append(data)
+        elif resp.status_code == 403 and "rate limit" in resp.text.lower():
+            reset = int(resp.headers.get("X-RateLimit-Reset", time.time() + 60))
+            wait = max(reset - time.time(), 1)
+            print(f"Rate limited, sleeping {wait:.0f}s...")
+            time.sleep(wait)
+            issues.insert(i + 1, issue)  # retry this one next
+        elif resp.status_code == 422:
+            print(
+                f"[{i + 1}/{len(issues)}] FAILED (422 - check assignees exist/have access): {resp.text}"
+            )
+        else:
+            print(f"[{i + 1}/{len(issues)}] FAILED: {resp.status_code} {resp.text}")
+
+        time.sleep(1)  # pacing to avoid secondary rate limits
+
+    return results
+
+
+# Doc  : main
+# parses the command line arguments to get the project path and
+# the todo file name, reads and parses the todo file into issues,
+# resolves the credentials and opens every issue in github
+
+
+def main():
+    parser = argparse.ArgumentParser(description="cli tool to bulk open github issues")
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default=".",
+        help="path to project root",
+    )
+    parser.add_argument(
+        "file_path",
+        nargs="?",
+        default="todo",
+        help="name of the file we will read from",
+    )
+    parser.add_argument(
+        "--allow-duplicates",
+        action="store_true",
+        help="don't skip issues whose title already exists in the repo",
+    )
+    args = parser.parse_args()
+
+    full_file_path = os.path.join(args.path, f"{args.file_path}.txt")
+
+    issues = parse_file(full_file_path)
+    if issues is None:
+        print("Malformed issues folder or empty")
+        sys.exit(1)
+
+    try:
+        slug, token = get_credentials(args.path)
+    except RuntimeError as e:
+        print(str(e))
+        sys.exit(1)
+
+    print(f"Found {len(issues)} issue(s) to open in {slug}")
+    open_issues(issues, slug, token, skip_duplicates=not args.allow_duplicates)
+
+
+if __name__ == "__main__":
+    main()
