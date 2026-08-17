@@ -76,11 +76,12 @@ def get_credentials(path: str):
 
 ## parse_file
 
-parses the todo txt file into a list of issues, every issue is  
-a block of lines separated by blank lines, the first line is the  
-title, the second starts with # and holds the labels, an optional  
-line starting with @ holds the assignees and the rest is the  
-description, blocks that don't fit the format are skipped  
+parses the todo txt file into a list of issues, a title: line  
+starts a new issue and only the title is mandatory, optional  
+description:, # and @ lines hold the description, the labels and  
+the assignees, plain lines are appended to the description, lines  
+before a title and unknown labels or headings are ignored, blank  
+lines are skipped so the fields can be spread out freely  
 
 ## get_existing_issue_titles
 

@@ -106,11 +106,12 @@ def get_credentials(path: str):
 # Doc end
 
 # Doc: parse_file
-# parses the todo txt file into a list of issues, every issue is
-# a block of lines separated by blank lines, the first line is the
-# title, the second starts with # and holds the labels, an optional
-# line starting with @ holds the assignees and the rest is the
-# description, blocks that don't fit the format are skipped
+# parses the todo txt file into a list of issues, a title: line
+# starts a new issue and only the title is mandatory, optional
+# description:, # and @ lines hold the description, the labels and
+# the assignees, plain lines are appended to the description, lines
+# before a title and unknown labels or headings are ignored, blank
+# lines are skipped so the fields can be spread out freely
 
 
 def parse_file(file_path: str) -> list[Issue] | None:
@@ -118,42 +119,45 @@ def parse_file(file_path: str) -> list[Issue] | None:
         return None
     with open(file_path, "r") as f:
         content = f.read()
-    blocks = [b.strip() for b in content.strip().split("\n\n") if b.strip()]
-    if not blocks:
-        return None
     issues = []
-    for block in blocks:
-        lines = block.splitlines()
-        if len(lines) < 2:
-            # malformed block
+    current = None
+    for raw in content.splitlines():
+        stripped = raw.strip()
+        if not stripped:
             continue
-        title = lines[0].strip()
-        label_line = lines[1].strip()
-        if not label_line.startswith("#"):
+        low = stripped.lower()
+        if low.startswith("title:"):
+            # a new title line starts the next issue
+            if current is not None:
+                issues.append(current)
+            current = Issue(title=stripped[len("title:") :].strip(), description="")
+        elif current is None:
+            # no title yet, stray lines are ignored
             continue
-        labels = [
-            l.strip()
-            for l in label_line.lstrip("#").split(",")
-            if l.strip() in ALLOWED_LABELS
-        ]
-        assign = []
-        body_lines = []
-        for line in lines[2:]:
-            stripped = line.strip()
-            if stripped.startswith("@"):
-                assign = [
-                    a.strip().lstrip("@")
-                    for a in stripped.lstrip("@").split(",")
-                    if a.strip()
-                ]
-                break
-            body_lines.append(line)
-        description = "\n".join(body_lines).strip()
-        issues.append(
-            Issue(
-                title=title, description=description, labels=set(labels), assign=assign
+        elif low.startswith("description:"):
+            text = stripped[len("description:") :].strip()
+            current.description = (
+                f"{current.description}\n{text}" if current.description else text
             )
-        )
+        elif stripped.startswith("#"):
+            # unknown labels and headings like ## TODO are dropped
+            current.labels |= {
+                l.strip()
+                for l in stripped.lstrip("#").split(",")
+                if l.strip() in ALLOWED_LABELS
+            }
+        elif stripped.startswith("@"):
+            current.assign = [
+                a.strip().lstrip("@")
+                for a in stripped.lstrip("@").split(",")
+                if a.strip()
+            ]
+        else:
+            current.description = (
+                f"{current.description}\n{stripped}" if current.description else stripped
+            )
+    if current is not None:
+        issues.append(current)
     return issues if issues else None
 
 
@@ -240,7 +244,7 @@ def open_issues(
             issues.insert(i + 1, issue)  # retry this one next
         elif resp.status_code == 422:
             print(
-                f"[{i + 1}/{len(issues)}] FAILED (422 - check assignees exist/have access): {resp.text}"
+                f"[{i + 1}/{len(issues)}] FAILED (422 - check the labels exist and the assignees have access): {resp.text}"
             )
         else:
             print(f"[{i + 1}/{len(issues)}] FAILED: {resp.status_code} {resp.text}")

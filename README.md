@@ -66,29 +66,25 @@ issue-opener . todo
 
 ## Issue file format
 
-Issues are blocks of lines separated by blank lines:
+Issues are blocks of lines separated by blank lines, only the `title:` is mandatory, everything else is optional:
 
-- first line: the issue title
-- second line: `#` followed by comma-separated labels (must be valid GitHub labels)
-- optional line starting with `@`: comma-separated assignees (must have access to the repo)
-- the remaining lines: the issue description
+- `title:` the issue title (mandatory)
+- `description:` the issue description
+- a line starting with `#`: comma-separated labels (must be valid GitHub labels)
+- a line starting with `@`: comma-separated assignees (must have access to the repo)
+- any other line is appended to the description
 
 Example `todo.txt`:
 
 ```
-Add dark mode
-
+title: Add dark mode
+description: Users should be able to switch to dark mode
 # enhancement
+@ username1 , username2
 
-Users should be able to switch to dark mode
-
-@username1 , username2
-
-Fix login crash
-
+title: Fix login crash
+description: The login page crashes when the form is submitted
 # bug , help wanted
-
-The login page crashes when the form is submitted
 ```
 
 ## Notes
