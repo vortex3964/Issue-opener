@@ -107,8 +107,9 @@ checkout is left alone
 
 ## main
 
-parses the command line arguments to get the project path and  
-the todo file name, reads and parses the todo file into issues,  
+parses the command line arguments to get the project path, the  
+todo file name and any --label flags, reads and parses the todo  
+file into issues, merges the extra labels into every issue,  
 resolves the credentials and opens every issue in github, the  
-update and uninstall flags only manage the tool itself and  
-skip the issue run
+update and uninstall flags only manage the tool itself and skip  
+the issue run

@@ -60,7 +60,7 @@ bash install/uninstall.sh
 ## Usage
 
 ```
-issue-opener [path] [file_path] [--allow-duplicates]
+issue-opener [path] [file_path] [--allow-duplicates] [--label LABEL]
 ```
 
 | Argument | Description |
@@ -68,6 +68,7 @@ issue-opener [path] [file_path] [--allow-duplicates]
 | `path` | project root, defaults to the current directory |
 | `file_path` | name of the file to read (`.txt` is appended), defaults to `todo` |
 | `--allow-duplicates` | don't skip issues whose title already exists in the repo |
+| `--label LABEL` | add an extra label to every issue, repeatable and comma-separated |
 | `--update` | update issue-opener to the latest version, skips the issue run |
 | `--uninstall` | remove issue-opener, its launcher and the path lines, skips the issue run |
 
@@ -75,6 +76,7 @@ Example:
 
 ```
 issue-opener . todo
+issue-opener . todo --label "needs triage" --label bug
 ```
 
 ## Issue file format

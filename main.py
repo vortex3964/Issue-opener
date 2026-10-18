@@ -416,11 +416,12 @@ def uninstall_self() -> None:
 
 
 # Doc  : main
-# parses the command line arguments to get the project path and
-# the todo file name, reads and parses the todo file into issues,
+# parses the command line arguments to get the project path, the
+# todo file name and any --label flags, reads and parses the todo
+# file into issues, merges the extra labels into every issue,
 # resolves the credentials and opens every issue in github, the
-# update and uninstall flags only manage the tool itself and
-# skip the issue run
+# update and uninstall flags only manage the tool itself and skip
+# the issue run
 
 
 def main():
@@ -441,6 +442,13 @@ def main():
         "--allow-duplicates",
         action="store_true",
         help="don't skip issues whose title already exists in the repo",
+    )
+    parser.add_argument(
+        "--label",
+        action="append",
+        default=[],
+        metavar="LABEL",
+        help="extra labels for every issue, repeatable and comma-separated",
     )
     parser.add_argument(
         "--update",
@@ -470,6 +478,15 @@ def main():
     if issues is None:
         print("Malformed issues folder or empty")
         sys.exit(1)
+
+    # --label flags add extra labels on top of the ones from the file
+    if args.label:
+        extra_labels = {
+            l.strip() for value in args.label for l in value.split(",") if l.strip()
+        }
+        if extra_labels:
+            for issue in issues:
+                issue.labels |= extra_labels
 
     try:
         slug, token = get_credentials(args.path)
