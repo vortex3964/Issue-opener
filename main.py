@@ -23,8 +23,8 @@ import requests
 
 # Doc code : Issue
 # a single github issue to open, has a title, a description,
-# a set of labels and an optional list of assignees, the labels
-# are checked against githubs allowed labels
+# a set of labels and an optional list of assignees, labels are
+# free form so any custom label is accepted
 
 
 @dataclass
@@ -36,23 +36,6 @@ class Issue:
 
 
 # Doc end
-
-# Doc : githubs allowed labels
-# we have a set with githubs allowed labels that we init
-# these labels include among others : bug , invalid ...etch
-ALLOWED_LABELS = {
-    "accessibility",
-    "bug",
-    "documentation",
-    "duplicate",
-    "enhancement",
-    "good first issue",
-    "help wanted",
-    "invalid",
-    "question",
-    "wontfix",
-}
-
 
 # Doc code : run
 # runs a shell command and returns its stripped stdout,
@@ -109,9 +92,10 @@ def get_credentials(path: str):
 # parses the todo txt file into a list of issues, a title: line
 # starts a new issue and only the title is mandatory, optional
 # description:, # and @ lines hold the description, the labels and
-# the assignees, plain lines are appended to the description, lines
-# before a title and unknown labels or headings are ignored, blank
-# lines are skipped so the fields can be spread out freely
+# the assignees, any label name is accepted so custom labels work
+# out of the box while ## headings are ignored, plain lines are
+# appended to the description, lines before a title are ignored,
+# blank lines are skipped so the fields can be spread out freely
 
 
 def parse_file(file_path: str) -> list[Issue] | None:
@@ -139,12 +123,13 @@ def parse_file(file_path: str) -> list[Issue] | None:
             current.description = (
                 f"{current.description}\n{text}" if current.description else text
             )
+        elif stripped.startswith("##"):
+            # headings like ## TODO are still ignored
+            continue
         elif stripped.startswith("#"):
-            # unknown labels and headings like ## TODO are dropped
+            # any label is accepted so custom labels work too
             current.labels |= {
-                l.strip()
-                for l in stripped.lstrip("#").split(",")
-                if l.strip() in ALLOWED_LABELS
+                l.strip() for l in stripped.lstrip("#").split(",") if l.strip()
             }
         elif stripped.startswith("@"):
             current.assign = [

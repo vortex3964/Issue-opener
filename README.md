@@ -83,7 +83,7 @@ Issues are blocks of lines separated by blank lines, only the `title:` is mandat
 
 - `title:` the issue title (mandatory)
 - `description:` the issue description
-- a line starting with `#`: comma-separated labels (must be valid GitHub labels)
+- a line starting with `#`: comma-separated labels, any name works so custom labels are fine (`##` lines are ignored as headings)
 - a line starting with `@`: comma-separated assignees (must have access to the repo)
 - any other line is appended to the description
 
@@ -97,7 +97,7 @@ description: Users should be able to switch to dark mode
 
 title: Fix login crash
 description: The login page crashes when the form is submitted
-# bug , help wanted
+# bug , help wanted , needs triage
 ```
 
 ## Notes

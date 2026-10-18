@@ -9,8 +9,8 @@ detection through the github rest api
 ## Issue
 
 a single github issue to open, has a title, a description,  
-a set of labels and an optional list of assignees, the labels  
-are checked against githubs allowed labels  
+a set of labels and an optional list of assignees, labels are  
+free form so any custom label is accepted  
 
 ```py
 @dataclass
@@ -20,11 +20,6 @@ class Issue:
     labels: set[str] = field(default_factory=set)
     assign: list[str] = field(default_factory=list)
 ```
-
-## githubs allowed labels
-
-we have a set with githubs allowed labels that we init  
-these labels include among others : bug , invalid ...etch  
 
 ## run
 
@@ -79,9 +74,10 @@ def get_credentials(path: str):
 parses the todo txt file into a list of issues, a title: line  
 starts a new issue and only the title is mandatory, optional  
 description:, # and @ lines hold the description, the labels and  
-the assignees, plain lines are appended to the description, lines  
-before a title and unknown labels or headings are ignored, blank  
-lines are skipped so the fields can be spread out freely  
+the assignees, any label name is accepted so custom labels work  
+out of the box while ## headings are ignored, plain lines are  
+appended to the description, lines before a title are ignored,  
+blank lines are skipped so the fields can be spread out freely  
 
 ## get_existing_issue_titles
 
