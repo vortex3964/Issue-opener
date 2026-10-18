@@ -10,7 +10,7 @@ detection through the github rest api
 
 a single github issue to open, has a title, a description,  
 a set of labels and an optional list of assignees, labels are  
-free form so any custom label is accepted  
+free form so any custom label is accepted and lowercased  
 
 ```py
 @dataclass
@@ -74,10 +74,11 @@ def get_credentials(path: str):
 parses the todo txt file into a list of issues, a title: line  
 starts a new issue and only the title is mandatory, optional  
 description:, # and @ lines hold the description, the labels and  
-the assignees, any label name is accepted so custom labels work  
-out of the box while ## headings are ignored, plain lines are  
-appended to the description, lines before a title are ignored,  
-blank lines are skipped so the fields can be spread out freely  
+the assignees, any label name is accepted and lowercased so  
+custom labels work out of the box while ## headings are ignored,  
+plain lines are appended to the description, lines before a  
+title are ignored, blank lines are skipped so the fields can be  
+spread out freely  
 
 ## get_existing_issue_titles
 
@@ -105,11 +106,17 @@ removes the launcher, the install dir with its venv and the
 path lines the installer added to the shell configs, a dev  
 checkout is left alone  
 
+## show skill
+
+prints the agent skill file that explains how to convert a raw  
+txt into the issue opener format, it is meant to be pasted into  
+an ai chat together with the txt, skips the issue run
+
 ## main
 
 parses the command line arguments to get the project path, the  
 todo file name and any --label flags, reads and parses the todo  
 file into issues, merges the extra labels into every issue,  
 resolves the credentials and opens every issue in github, the  
-update and uninstall flags only manage the tool itself and skip  
-the issue run
+update, uninstall and skill flags only manage the tool itself  
+and skip the issue run

@@ -60,7 +60,7 @@ bash install/uninstall.sh
 ## Usage
 
 ```
-issue-opener [path] [file_path] [--allow-duplicates] [--label LABEL]
+issue-opener [path] [file_path] [--allow-duplicates] [--label LABEL] [--skill]
 ```
 
 | Argument | Description |
@@ -71,6 +71,7 @@ issue-opener [path] [file_path] [--allow-duplicates] [--label LABEL]
 | `--label LABEL` | add an extra label to every issue, repeatable and comma-separated |
 | `--update` | update issue-opener to the latest version, skips the issue run |
 | `--uninstall` | remove issue-opener, its launcher and the path lines, skips the issue run |
+| `--skill` | print the agent skill for converting txt files, skips the issue run |
 
 Example:
 
@@ -102,7 +103,16 @@ description: The login page crashes when the form is submitted
 # bug , help wanted , needs triage
 ```
 
+## Agent skill
+
+`agent/skill.md` explains how to convert a raw txt into the issue file format. Print it and paste the output into an AI chat together with your txt:
+
+```
+issue-opener --skill
+```
+
 ## Notes
 
 - issues whose title already exists in the repo are skipped by default
+- labels are lowercased, both the `#` lines in the file and `--label` flags
 - sleeps between requests and backs off on rate limits to stay within GitHub's limits

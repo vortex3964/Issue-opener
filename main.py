@@ -24,7 +24,7 @@ import requests
 # Doc code : Issue
 # a single github issue to open, has a title, a description,
 # a set of labels and an optional list of assignees, labels are
-# free form so any custom label is accepted
+# free form so any custom label is accepted and lowercased
 
 
 @dataclass
@@ -92,10 +92,11 @@ def get_credentials(path: str):
 # parses the todo txt file into a list of issues, a title: line
 # starts a new issue and only the title is mandatory, optional
 # description:, # and @ lines hold the description, the labels and
-# the assignees, any label name is accepted so custom labels work
-# out of the box while ## headings are ignored, plain lines are
-# appended to the description, lines before a title are ignored,
-# blank lines are skipped so the fields can be spread out freely
+# the assignees, any label name is accepted and lowercased so
+# custom labels work out of the box while ## headings are ignored,
+# plain lines are appended to the description, lines before a
+# title are ignored, blank lines are skipped so the fields can be
+# spread out freely
 
 
 def parse_file(file_path: str) -> list[Issue] | None:
@@ -127,9 +128,12 @@ def parse_file(file_path: str) -> list[Issue] | None:
             # headings like ## TODO are still ignored
             continue
         elif stripped.startswith("#"):
-            # any label is accepted so custom labels work too
+            # any label is accepted so custom labels work too,
+            # labels are lowercased
             current.labels |= {
-                l.strip() for l in stripped.lstrip("#").split(",") if l.strip()
+                l.strip().lower()
+                for l in stripped.lstrip("#").split(",")
+                if l.strip()
             }
         elif stripped.startswith("@"):
             current.assign = [
@@ -415,13 +419,30 @@ def uninstall_self() -> None:
     print(f"{APP} uninstalled")
 
 
+# Doc : show skill
+# prints the agent skill file that explains how to convert a raw
+# txt into the issue opener format, it is meant to be pasted into
+# an ai chat together with the txt, skips the issue run
+
+
+def show_skill():
+    path = os.path.join(
+        os.path.dirname(os.path.realpath(__file__)), "agent", "skill.md"
+    )
+    try:
+        with open(path) as f:
+            print(f.read())
+    except OSError:
+        print("couldn't find the agent skill, expected it at agent/skill.md")
+
+
 # Doc  : main
 # parses the command line arguments to get the project path, the
 # todo file name and any --label flags, reads and parses the todo
 # file into issues, merges the extra labels into every issue,
 # resolves the credentials and opens every issue in github, the
-# update and uninstall flags only manage the tool itself and skip
-# the issue run
+# update, uninstall and skill flags only manage the tool itself
+# and skip the issue run
 
 
 def main():
@@ -460,16 +481,25 @@ def main():
         action="store_true",
         help="remove the tool, the launcher and the path lines, skips the issue run",
     )
+    parser.add_argument(
+        "--skill",
+        action="store_true",
+        help="print the agent skill for converting txt files, skips the issue run",
+    )
     args = parser.parse_args()
 
-    # the update and uninstall flags only manage the tool itself,
-    # nothing else runs
+    # the update, uninstall and skill flags only manage the tool
+    # itself, nothing else runs
     if args.uninstall:
         uninstall_self()
         return
 
     if args.update:
         check_for_update(apply=True)
+        return
+
+    if args.skill:
+        show_skill()
         return
 
     full_file_path = os.path.join(args.path, f"{args.file_path}.txt")
@@ -482,7 +512,10 @@ def main():
     # --label flags add extra labels on top of the ones from the file
     if args.label:
         extra_labels = {
-            l.strip() for value in args.label for l in value.split(",") if l.strip()
+            l.strip().lower()
+            for value in args.label
+            for l in value.split(",")
+            if l.strip()
         }
         if extra_labels:
             for issue in issues:
